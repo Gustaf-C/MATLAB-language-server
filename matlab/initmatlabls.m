@@ -16,9 +16,14 @@ function initmatlabls (outFile)
         matlabls.setupShadows(folder);
         
         try
+            % Disable specific settings which may cause editor windows to open
             s = settings;
             s.matlab.editor.OpenFileAtBreakpoint.TemporaryValue = false;
             s.matlab.editor.ReopenFilesOnRestart.TemporaryValue = false;
+            if ~isMATLABReleaseOlderThan('R2022a')
+                % setting introduced in R2022a
+                s.matlab.desktop.RestoreDesktopConfig.TemporaryValue = false;
+            end
         catch ME
         end
 
