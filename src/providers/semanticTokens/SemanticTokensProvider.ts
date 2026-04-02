@@ -61,6 +61,8 @@ class SemanticTokensProvider {
         scope: MatlabGlobalScopeInfo | MatlabFunctionScopeInfo,
         tokens: VariableToken[]
     ): void {
+
+        // Global scope, e.g. for scripts
         for (const variableInfo of scope.variables.values()) {
             for (const ref of variableInfo.references) {
                 if (ref.components.length > 0) {
@@ -70,6 +72,17 @@ class SemanticTokensProvider {
             }
         }
 
+        // Class scope, for class definitions and methods
+        const classScope = (scope as MatlabGlobalScopeInfo).classScope;
+        if (classScope) {
+            for (const nestedFunc of classScope.functionScopes.values()) {
+                if (nestedFunc.functionScopeInfo) {
+                    this.collectVariableTokens(nestedFunc.functionScopeInfo, tokens);
+                }
+            }
+        }
+
+        // Function scopes, for nested functions
         for (const nestedFunc of scope.functionScopes.values()) {
             if (nestedFunc.functionScopeInfo) {
                 this.collectVariableTokens(nestedFunc.functionScopeInfo, tokens)
