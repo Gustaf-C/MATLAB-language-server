@@ -10,17 +10,16 @@ interface VariableToken {
 }
 
 class SemanticTokensProvider {
-    constructor(
+    constructor (
         protected readonly matlabLifecycleManager: MatlabLifecycleManager,
         protected readonly documentIndexer: DocumentIndexer,
         protected readonly fileInfoIndex: FileInfoIndex
     ) { }
 
-    async handleSemanticTokensRequest(
+    async handleSemanticTokensRequest (
         params: SemanticTokensParams,
         documentManager: TextDocuments<TextDocument>
     ): Promise<SemanticTokens | null> {
-
         // This request will be called constantly, should not connect to MATLAB just because it was called
         const matlabConnection = await this.matlabLifecycleManager.getMatlabConnection(false)
         if (matlabConnection == null) {
@@ -29,22 +28,24 @@ class SemanticTokensProvider {
         }
 
         const textDocument = documentManager.get(params.textDocument.uri)
-        if (!textDocument) return null
+        if (textDocument == null) return null
 
         await this.documentIndexer.ensureDocumentIndexIsUpdated(textDocument)
 
         const codeInfo = this.fileInfoIndex.codeInfoCache.get(params.textDocument.uri)
-        if (!codeInfo) {
+        if (codeInfo == null) {
             return { data: [] }
         }
 
         const tokens: VariableToken[] = []
         this.collectVariableTokens(codeInfo.globalScopeInfo, tokens)
 
-        tokens.sort((a, b) =>
-            (a.range.start.line - b.range.start.line) ||
-            (a.range.start.character - b.range.start.character)
-        )
+        tokens.sort((a, b) => {
+            const lineDiff = a.range.start.line - b.range.start.line
+            if (lineDiff !== 0) return lineDiff
+
+            return a.range.start.character - b.range.start.character
+        })
 
         const data: number[] = []
         let prevLine = 0
@@ -67,34 +68,29 @@ class SemanticTokensProvider {
         return { data }
     }
 
-    private collectVariableTokens(
+    private collectVariableTokens (
         scope: MatlabGlobalScopeInfo | MatlabFunctionScopeInfo,
         tokens: VariableToken[]
     ): void {
-
         // Variables: highlight only the first component as variable
         for (const item of scope.variables.values()) {
             for (const ref of item.references) {
-                if (ref.components[0]) {
-                    tokens.push({ range: ref.components[0].range, typeIndex: 1 }) // variable
-                }
+                tokens.push({ range: ref.components[0].range, typeIndex: 1 }) // variable
             }
         }
 
         // Functions/unbound: highlight only the first component as function
         for (const item of scope.functionOrUnboundReferences.values()) {
             for (const ref of item.references) {
-                if (ref.components[0]) {
-                    tokens.push({ range: ref.components[0].range, typeIndex: 0 }) // function
-                }
+                tokens.push({ range: ref.components[0].range, typeIndex: 0 }) // function
             }
         }
 
         // Class scope
         const classScope = (scope as MatlabGlobalScopeInfo).classScope;
-        if (classScope) {
+        if (classScope != null) {
             for (const nestedFunc of classScope.functionScopes.values()) {
-                if (nestedFunc.functionScopeInfo) {
+                if (nestedFunc.functionScopeInfo != null) {
                     this.collectVariableTokens(nestedFunc.functionScopeInfo, tokens);
                 }
             }
@@ -102,7 +98,7 @@ class SemanticTokensProvider {
 
         // Function scopes
         for (const nestedFunc of scope.functionScopes.values()) {
-            if (nestedFunc.functionScopeInfo) {
+            if (nestedFunc.functionScopeInfo != null) {
                 this.collectVariableTokens(nestedFunc.functionScopeInfo, tokens)
             }
         }
