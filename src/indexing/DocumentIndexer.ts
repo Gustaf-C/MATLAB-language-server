@@ -12,6 +12,7 @@ const INDEXING_DELAY = 500 // Delay (in ms) after keystroke before attempting to
  */
 export default class DocumentIndexer {
     private readonly pendingFilesToIndex = new Map<string, NodeJS.Timeout>()
+    private onIndexed?: (uri: string) => void
 
     constructor (
         private readonly indexer: Indexer,
@@ -42,6 +43,7 @@ export default class DocumentIndexer {
      */
     indexDocument (textDocument: TextDocument): void {
         void this.indexer.indexDocument(textDocument)
+        this.onIndexed?.(textDocument.uri)
     }
 
     /**
@@ -73,5 +75,11 @@ export default class DocumentIndexer {
         if (!this.fileInfoIndex.codeInfoCache.has(uri)) {
             await this.indexer.indexDocument(textDocument)
         }
+
+        this.onIndexed?.(uri)
+    }
+
+    setOnIndexed (callback: (uri: string) => void): void {
+        this.onIndexed = callback
     }
 }

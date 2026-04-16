@@ -273,7 +273,7 @@ export async function startServer (): Promise<void> {
         reportFileOpened(params.document)
         void lintingSupportProvider.lintDocument(params.document)
         void documentIndexer.indexDocument(params.document)
-        
+
         void navigationSupportProvider.handleDocumentSymbol(params.document.uri, documentManager, RequestType.DocumentSymbol)
     })
 
@@ -375,6 +375,20 @@ export async function startServer (): Promise<void> {
     connection.onRequest(SemanticTokensRequest.method, async (params: SemanticTokensParams) => {
         return await semanticTokensProvider.handleSemanticTokensRequest(params, documentManager)
     })
+
+    documentIndexer.setOnIndexed(() => {
+        scheduleSemanticRefresh()
+    })
+
+    let refreshTimer: NodeJS.Timeout | undefined
+
+    function scheduleSemanticRefresh (): void {
+        if (refreshTimer != null) clearTimeout(refreshTimer)
+
+        refreshTimer = setTimeout(() => {
+            void connection.sendRequest('workspace/semanticTokens/refresh')
+        }, 150)
+    }
 }
 
 /** -------------------- Helper Functions -------------------- **/
