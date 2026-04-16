@@ -1,4 +1,5 @@
 import { SemanticTokens, SemanticTokensParams, TextDocuments, Range } from 'vscode-languageserver'
+import MatlabLifecycleManager from '../../lifecycle/MatlabLifecycleManager'
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import FileInfoIndex, { MatlabFunctionScopeInfo, MatlabGlobalScopeInfo } from '../../indexing/FileInfoIndex'
 import DocumentIndexer from '../../indexing/DocumentIndexer'
@@ -10,6 +11,7 @@ interface VariableToken {
 
 class SemanticTokensProvider {
     constructor(
+        protected readonly matlabLifecycleManager: MatlabLifecycleManager,
         protected readonly documentIndexer: DocumentIndexer,
         protected readonly fileInfoIndex: FileInfoIndex
     ) { }
@@ -18,6 +20,13 @@ class SemanticTokensProvider {
         params: SemanticTokensParams,
         documentManager: TextDocuments<TextDocument>
     ): Promise<SemanticTokens | null> {
+
+        // This request will be called constantly, should not connect to MATLAB just because it was called
+        const matlabConnection = await this.matlabLifecycleManager.getMatlabConnection(false)
+        if (matlabConnection == null) {
+            // If MATLAB is not connected, fall back to textmate
+            return null
+        }
 
         const textDocument = documentManager.get(params.textDocument.uri)
         if (!textDocument) return null
@@ -41,6 +50,7 @@ class SemanticTokensProvider {
         let prevLine = 0
         let prevStart = 0
 
+        // Encode semantic tokens using relative line and character positions
         for (const token of tokens) {
             const line = token.range.start.line
             const start = token.range.start.character
@@ -62,17 +72,25 @@ class SemanticTokensProvider {
         tokens: VariableToken[]
     ): void {
 
-        // Global scope, e.g. for scripts
-        for (const variableInfo of scope.variables.values()) {
-            for (const ref of variableInfo.references) {
-                if (ref.components.length > 0) {
-                    const typeIndex = 0
-                    tokens.push({ range: ref.components[0].range, typeIndex })
+        // Variables: highlight only the first component as variable
+        for (const item of scope.variables.values()) {
+            for (const ref of item.references) {
+                if (ref.components[0]) {
+                    tokens.push({ range: ref.components[0].range, typeIndex: 1 }) // variable
                 }
             }
         }
 
-        // Class scope, for class definitions and methods
+        // Functions/unbound: highlight only the first component as function
+        for (const item of scope.functionOrUnboundReferences.values()) {
+            for (const ref of item.references) {
+                if (ref.components[0]) {
+                    tokens.push({ range: ref.components[0].range, typeIndex: 0 }) // function
+                }
+            }
+        }
+
+        // Class scope
         const classScope = (scope as MatlabGlobalScopeInfo).classScope;
         if (classScope) {
             for (const nestedFunc of classScope.functionScopes.values()) {
@@ -82,7 +100,7 @@ class SemanticTokensProvider {
             }
         }
 
-        // Function scopes, for nested functions
+        // Function scopes
         for (const nestedFunc of scope.functionScopes.values()) {
             if (nestedFunc.functionScopeInfo) {
                 this.collectVariableTokens(nestedFunc.functionScopeInfo, tokens)
@@ -91,6 +109,6 @@ class SemanticTokensProvider {
     }
 }
 
-export const SEMANTIC_TOKEN_TYPES = ['variable']
+export const SEMANTIC_TOKEN_TYPES = ['function', 'variable']
 export const SEMANTIC_TOKEN_MODIFIERS: string[] = []
 export default SemanticTokensProvider

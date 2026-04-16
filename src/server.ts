@@ -74,7 +74,7 @@ export async function startServer (): Promise<void> {
     const navigationSupportProvider = new NavigationSupportProvider(matlabLifecycleManager, fileInfoIndex, indexer, documentIndexer, pathResolver)
     const renameSymbolProvider = new RenameSymbolProvider(matlabLifecycleManager, documentIndexer, fileInfoIndex)
     const highlightSymbolProvider = new HighlightSymbolProvider(matlabLifecycleManager, documentIndexer, indexer, fileInfoIndex)
-    const semanticTokensProvider = new SemanticTokensProvider(documentIndexer, fileInfoIndex)
+    const semanticTokensProvider = new SemanticTokensProvider(matlabLifecycleManager, documentIndexer, fileInfoIndex)
 
     let pathSynchronizer: PathSynchronizer | null
 
