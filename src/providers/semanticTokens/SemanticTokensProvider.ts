@@ -40,6 +40,8 @@ class SemanticTokensProvider {
         const tokens: VariableToken[] = []
         this.collectVariableTokens(codeInfo.globalScopeInfo, tokens)
 
+        // Sort tokens by their position in the document (line and character)
+        // This is necessary to encode them using relative positions
         tokens.sort((a, b) => {
             const lineDiff = a.range.start.line - b.range.start.line
             if (lineDiff !== 0) return lineDiff

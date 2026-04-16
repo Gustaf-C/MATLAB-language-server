@@ -376,6 +376,8 @@ export async function startServer (): Promise<void> {
         return await semanticTokensProvider.handleSemanticTokensRequest(params, documentManager)
     })
 
+    // Ensures that semantic tokens are refreshed after indexing,
+    // so highlighting is updated after opening the editor.
     documentIndexer.setOnIndexed(() => {
         scheduleSemanticRefresh()
     })
@@ -385,6 +387,7 @@ export async function startServer (): Promise<void> {
     function scheduleSemanticRefresh (): void {
         if (refreshTimer != null) clearTimeout(refreshTimer)
 
+        // Delay sending the refresh notification to batch multiple indexing updates together
         refreshTimer = setTimeout(() => {
             void connection.sendRequest('workspace/semanticTokens/refresh')
         }, 150)
