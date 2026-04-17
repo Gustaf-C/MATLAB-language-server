@@ -4,7 +4,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument'
 import FileInfoIndex, { MatlabFunctionScopeInfo, MatlabGlobalScopeInfo } from '../../indexing/FileInfoIndex'
 import DocumentIndexer from '../../indexing/DocumentIndexer'
 
-interface VariableToken {
+interface SemanticToken {
     range: Range
     typeIndex: number
 }
@@ -20,12 +20,10 @@ class SemanticTokensProvider {
         params: SemanticTokensParams,
         documentManager: TextDocuments<TextDocument>
     ): Promise<SemanticTokens | null> {
-        // This request will be called constantly, should not connect to MATLAB just because it was called
+        // This provider will be called constantly, should not connect to MATLAB just because it was called
         const matlabConnection = await this.matlabLifecycleManager.getMatlabConnection(false)
-        if (matlabConnection == null) {
-            // If MATLAB is not connected, fall back to textmate
-            return null
-        }
+        // If MATLAB is not connected, fall back to default highlighting
+        if (matlabConnection == null) return null
 
         const textDocument = documentManager.get(params.textDocument.uri)
         if (textDocument == null) return null
@@ -33,12 +31,10 @@ class SemanticTokensProvider {
         await this.documentIndexer.ensureDocumentIndexIsUpdated(textDocument)
 
         const codeInfo = this.fileInfoIndex.codeInfoCache.get(params.textDocument.uri)
-        if (codeInfo == null) {
-            return { data: [] }
-        }
+        if (codeInfo == null) return null
 
-        const tokens: VariableToken[] = []
-        this.collectVariableTokens(codeInfo.globalScopeInfo, tokens)
+        const tokens: SemanticToken[] = []
+        this.collectSemanticTokens(codeInfo.globalScopeInfo, tokens)
 
         // Sort tokens by their position in the document (line and character)
         // This is necessary to encode them using relative positions
@@ -70,9 +66,15 @@ class SemanticTokensProvider {
         return { data }
     }
 
-    private collectVariableTokens (
+    /**
+     * Recursively collects semantic tokens for a given scope and its nested scopes.
+     * Tokens are appended to 'tokens' in-place.
+    * @param scope The scope from which semantic tokens should be collected
+    * @param tokens The array to which collected semantic tokens are appended
+    */
+    private collectSemanticTokens (
         scope: MatlabGlobalScopeInfo | MatlabFunctionScopeInfo,
-        tokens: VariableToken[]
+        tokens: SemanticToken[]
     ): void {
         // Variables: highlight only the first component as variable
         for (const item of scope.variables.values()) {
@@ -93,7 +95,7 @@ class SemanticTokensProvider {
         if (classScope != null) {
             for (const nestedFunc of classScope.functionScopes.values()) {
                 if (nestedFunc.functionScopeInfo != null) {
-                    this.collectVariableTokens(nestedFunc.functionScopeInfo, tokens);
+                    this.collectSemanticTokens(nestedFunc.functionScopeInfo, tokens);
                 }
             }
         }
@@ -101,7 +103,7 @@ class SemanticTokensProvider {
         // Function scopes
         for (const nestedFunc of scope.functionScopes.values()) {
             if (nestedFunc.functionScopeInfo != null) {
-                this.collectVariableTokens(nestedFunc.functionScopeInfo, tokens)
+                this.collectSemanticTokens(nestedFunc.functionScopeInfo, tokens)
             }
         }
     }
