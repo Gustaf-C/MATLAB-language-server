@@ -23,6 +23,7 @@ import Indexer from './indexing/Indexer'
 import RenameSymbolProvider from './providers/rename/RenameSymbolProvider'
 import HighlightSymbolProvider from './providers/highlighting/HighlightSymbolProvider'
 import SemanticTokensProvider, { SEMANTIC_TOKEN_TYPES, SEMANTIC_TOKEN_MODIFIERS } from './providers/semanticTokens/SemanticTokensProvider'
+import setupSemanticTokenRefresh from './providers/semanticTokens/setupSemanticTokenRefresh'
 import { RequestType } from './indexing/SymbolSearchService'
 import { cacheAndClearProxyEnvironmentVariables } from './utils/ProxyUtils'
 import MatlabDebugAdaptorServer from './debug/MatlabDebugAdaptorServer'
@@ -375,23 +376,7 @@ export async function startServer (): Promise<void> {
     connection.onRequest(SemanticTokensRequest.method, async (params: SemanticTokensParams) => {
         return await semanticTokensProvider.handleSemanticTokensRequest(params, documentManager)
     })
-
-    // Ensures that semantic tokens are refreshed after indexing,
-    // so highlighting is updated after opening the editor.
-    documentIndexer.setOnIndexed(() => {
-        scheduleSemanticRefresh()
-    })
-
-    let refreshTimer: NodeJS.Timeout | undefined
-
-    function scheduleSemanticRefresh (): void {
-        if (refreshTimer != null) clearTimeout(refreshTimer)
-
-        // Delay sending the refresh notification to batch multiple indexing updates together
-        refreshTimer = setTimeout(() => {
-            void connection.sendRequest('workspace/semanticTokens/refresh')
-        }, 150)
-    }
+    setupSemanticTokenRefresh(connection, documentIndexer)
 }
 
 /** -------------------- Helper Functions -------------------- **/
