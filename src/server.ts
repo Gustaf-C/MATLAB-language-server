@@ -22,8 +22,7 @@ import PathResolver from './providers/navigation/PathResolver'
 import Indexer from './indexing/Indexer'
 import RenameSymbolProvider from './providers/rename/RenameSymbolProvider'
 import HighlightSymbolProvider from './providers/highlighting/HighlightSymbolProvider'
-import SemanticTokensProvider, { SEMANTIC_TOKEN_TYPES, SEMANTIC_TOKEN_MODIFIERS } from './providers/semanticTokens/SemanticTokensProvider'
-import setupSemanticTokenRefresh from './providers/semanticTokens/setupSemanticTokenRefresh'
+import SemanticTokensProvider, { SEMANTIC_TOKEN_TYPES, SEMANTIC_TOKEN_MODIFIERS, setupSemanticTokensRefresh } from './providers/semanticTokens/SemanticTokensProvider'
 import { RequestType } from './indexing/SymbolSearchService'
 import { cacheAndClearProxyEnvironmentVariables } from './utils/ProxyUtils'
 import MatlabDebugAdaptorServer from './debug/MatlabDebugAdaptorServer'
@@ -376,7 +375,7 @@ export async function startServer (): Promise<void> {
     connection.onRequest(SemanticTokensRequest.method, async (params: SemanticTokensParams) => {
         return await semanticTokensProvider.handleSemanticTokensRequest(params, documentManager)
     })
-    setupSemanticTokenRefresh(connection, documentIndexer)
+    setupSemanticTokensRefresh(connection, documentIndexer)
 }
 
 /** -------------------- Helper Functions -------------------- **/

@@ -1,4 +1,4 @@
-import { SemanticTokens, SemanticTokensParams, TextDocuments, Range } from 'vscode-languageserver'
+import { SemanticTokens, SemanticTokensParams, TextDocuments, Range, Connection } from 'vscode-languageserver'
 import MatlabLifecycleManager from '../../lifecycle/MatlabLifecycleManager'
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import FileInfoIndex, { MatlabFunctionScopeInfo, MatlabGlobalScopeInfo } from '../../indexing/FileInfoIndex'
@@ -9,6 +9,9 @@ interface SemanticToken {
     typeIndex: number
 }
 
+/**
+ * Handles requests for semantic tokens for a document.
+ */
 class SemanticTokensProvider {
     constructor (
         protected readonly matlabLifecycleManager: MatlabLifecycleManager,
@@ -27,8 +30,6 @@ class SemanticTokensProvider {
 
         const textDocument = documentManager.get(params.textDocument.uri)
         if (textDocument == null) return null
-
-        await this.documentIndexer.ensureDocumentIndexIsUpdated(textDocument)
 
         const codeInfo = this.fileInfoIndex.codeInfoCache.get(params.textDocument.uri)
         if (codeInfo == null) return null
@@ -112,3 +113,24 @@ class SemanticTokensProvider {
 export const SEMANTIC_TOKEN_TYPES = ['function', 'variable']
 export const SEMANTIC_TOKEN_MODIFIERS: string[] = []
 export default SemanticTokensProvider
+
+/**
+ * Wires semantic token invalidation to document indexing.
+ *
+ * When indexing completes, this schedules a debounced refresh request
+ * so the client re-requests semantic tokens and updates highlighting.
+ */
+export function setupSemanticTokensRefresh (
+    connection: Connection,
+    documentIndexer: DocumentIndexer
+): void {
+    let refreshTimer: NodeJS.Timeout | undefined
+
+    documentIndexer.setOnIndexed(() => {
+        if (refreshTimer != null) clearTimeout(refreshTimer)
+
+        refreshTimer = setTimeout(() => {
+            void connection.sendRequest('workspace/semanticTokens/refresh')
+        }, 150)
+    })
+}
