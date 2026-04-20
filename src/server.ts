@@ -1,7 +1,7 @@
 // Copyright 2022 - 2025 The MathWorks, Inc.
 
 import { TextDocument } from 'vscode-languageserver-textdocument'
-import { ClientCapabilities, InitializeParams, InitializeResult, TextDocuments } from 'vscode-languageserver/node'
+import { ClientCapabilities, InitializeParams, InitializeResult, TextDocuments, SemanticTokensRequest, SemanticTokensParams } from 'vscode-languageserver/node'
 import DocumentIndexer from './indexing/DocumentIndexer'
 import WorkspaceIndexer from './indexing/WorkspaceIndexer'
 import ConfigurationManager, { ConnectionTiming } from './lifecycle/ConfigurationManager'
@@ -22,6 +22,7 @@ import PathResolver from './providers/navigation/PathResolver'
 import Indexer from './indexing/Indexer'
 import RenameSymbolProvider from './providers/rename/RenameSymbolProvider'
 import HighlightSymbolProvider from './providers/highlighting/HighlightSymbolProvider'
+import SemanticTokensProvider, { SEMANTIC_TOKEN_TYPES, SEMANTIC_TOKEN_MODIFIERS, setupSemanticTokensRefresh } from './providers/semanticTokens/SemanticTokensProvider'
 import { RequestType } from './indexing/SymbolSearchService'
 import { cacheAndClearProxyEnvironmentVariables } from './utils/ProxyUtils'
 import MatlabDebugAdaptorServer from './debug/MatlabDebugAdaptorServer'
@@ -73,6 +74,7 @@ export async function startServer (): Promise<void> {
     const navigationSupportProvider = new NavigationSupportProvider(matlabLifecycleManager, fileInfoIndex, indexer, documentIndexer, pathResolver)
     const renameSymbolProvider = new RenameSymbolProvider(matlabLifecycleManager, documentIndexer, fileInfoIndex)
     const highlightSymbolProvider = new HighlightSymbolProvider(matlabLifecycleManager, documentIndexer, indexer, fileInfoIndex)
+    const semanticTokensProvider = new SemanticTokensProvider(matlabLifecycleManager, documentIndexer, fileInfoIndex)
 
     let pathSynchronizer: PathSynchronizer | null
 
@@ -142,7 +144,14 @@ export async function startServer (): Promise<void> {
                 renameProvider: {
                     prepareProvider: true
                 },
-                documentHighlightProvider: true
+                documentHighlightProvider: true,
+                semanticTokensProvider: {
+                    legend: {
+                        tokenTypes: SEMANTIC_TOKEN_TYPES,
+                        tokenModifiers: SEMANTIC_TOKEN_MODIFIERS
+                    },
+                    full: true
+                }
             }
         }
 
@@ -264,7 +273,7 @@ export async function startServer (): Promise<void> {
         reportFileOpened(params.document)
         void lintingSupportProvider.lintDocument(params.document)
         void documentIndexer.indexDocument(params.document)
-        
+
         void navigationSupportProvider.handleDocumentSymbol(params.document.uri, documentManager, RequestType.DocumentSymbol)
     })
 
@@ -361,6 +370,12 @@ export async function startServer (): Promise<void> {
     connection.onDocumentHighlight(async params => {
         return await highlightSymbolProvider.handleDocumentHighlightRequest(params, documentManager)
     })
+
+    /** -------------- SEMANTIC TOKENS SUPPORT --------------- **/
+    connection.onRequest(SemanticTokensRequest.method, async (params: SemanticTokensParams) => {
+        return await semanticTokensProvider.handleSemanticTokensRequest(params, documentManager)
+    })
+    setupSemanticTokensRefresh(connection, documentIndexer)
 }
 
 /** -------------------- Helper Functions -------------------- **/
